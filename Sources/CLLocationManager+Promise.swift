@@ -19,8 +19,6 @@ extension CLLocationManager {
     public enum RequestAuthorizationType {
         /// Determine the authorization from the application’s plist
         case automatic
-        /// Request always-authorization
-        case always
         /// Request when-in-use-authorization
         case whenInUse
     }
@@ -68,15 +66,11 @@ extension CLLocationManager {
             switch authorizationType {
             case .automatic:
                 switch Bundle.main.permissionType {
-                case .always, .both:
-                    return auth(type: .always)
                 case .whenInUse:
                     return auth(type: .whenInUse)
                 }
             case .whenInUse:
                 return auth(type: .whenInUse)
-            case .always:
-                return auth(type: .always)
             }
         #endif
         }
@@ -167,37 +161,14 @@ extension CLLocationManager {
         }
 
         switch requestedAuthorizationType {
-        case .always:
-            func iOS11Check() -> Guarantee<CLAuthorizationStatus> {
-                switch currentStatus {
-                case .notDetermined, .authorizedWhenInUse:
-                    return AuthorizationCatcher(type: .always).promise
-                default:
-                    return .value(currentStatus)
-                }
-            }
-        #if PMKiOS11
-            // ^^ define PMKiOS11 if you deploy against the iOS 11 SDK
-            // otherwise the warning you get below cannot be removed
-            return iOS11Check()
-        #else
-            if #available(iOS 11, *) {
-                return iOS11Check()
-            } else {
-                return std(type: .always)
-            }
-        #endif
-
         case .whenInUse:
             return std(type: .whenInUse)
 
         case .automatic:
             if currentStatus == .notDetermined {
                 switch Bundle.main.permissionType {
-                case .both, .whenInUse:
+                case .whenInUse:
                     return AuthorizationCatcher(type: .whenInUse).promise
-                case .always:
-                    return AuthorizationCatcher(type: .always).promise
                 }
             } else {
                 return .value(currentStatus)
@@ -220,12 +191,6 @@ private class AuthorizationCatcher: CLLocationManager, CLLocationManagerDelegate
             retainCycle = self
 
             switch type {
-            case .always:
-            #if os(tvOS)
-                fallthrough
-            #else
-                requestAlwaysAuthorization()
-            #endif
             case .whenInUse:
                 requestWhenInUseAuthorization()
             }
@@ -237,7 +202,7 @@ private class AuthorizationCatcher: CLLocationManager, CLLocationManagerDelegate
 
         func iOS11Check() {
             switch (initialAuthorizationState, type) {
-            case (.notDetermined, .always), (.authorizedWhenInUse, .always), (.notDetermined, .whenInUse):
+            case (.notDetermined, .whenInUse):
                 ask(type: type)
             default:
                 fulfill(initialAuthorizationState)
@@ -273,8 +238,6 @@ private class AuthorizationCatcher: CLLocationManager, CLLocationManagerDelegate
 
 private extension Bundle {
     enum PermissionType {
-        case both
-        case always
         case whenInUse
     }
 
@@ -284,21 +247,11 @@ private extension Bundle {
             return !value.isEmpty
         }
 
-        if hasInfoPlistKey("NSLocationAlwaysAndWhenInUseUsageDescription") {
-            return .both
-        }
-        if hasInfoPlistKey("NSLocationAlwaysUsageDescription") {
-            return .always
-        }
         if hasInfoPlistKey("NSLocationWhenInUseUsageDescription") {
             return .whenInUse
         }
 
-        if #available(iOS 11, *) {
-            NSLog("PromiseKit: warning: `NSLocationAlwaysAndWhenInUseUsageDescription` key not set")
-        } else {
-            NSLog("PromiseKit: warning: `NSLocationWhenInUseUsageDescription` key not set")
-        }
+        NSLog("PromiseKit: warning: `NSLocationWhenInUseUsageDescription` key not set")
 
         // won't work, but we warned the user above at least
         return .whenInUse
@@ -306,6 +259,5 @@ private extension Bundle {
 }
 
 private enum PMKCLAuthorizationType {
-    case always
     case whenInUse
 }
